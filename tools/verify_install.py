@@ -26,6 +26,16 @@ def value(path, name=""):
         return None
 
 
+def has_value(path, name) -> bool:
+    """Whether the value exists: Open with's entries are empty REG_NONE values, which winreg reads back as None."""
+    try:
+        with winreg.OpenKey(HKCU, path) as k:
+            winreg.QueryValueEx(k, name)
+            return True
+    except OSError:
+        return False
+
+
 def check(ok, what, p):
     print(("ok    " if ok else "FAIL  ") + what)
     if not ok:
@@ -42,7 +52,7 @@ def installed():
     check(value(UNINSTALL, "DisplayName") == "Paragon PR7-PM", "Installed apps entry", p)
     cmd = value(rf"Software\Classes\{PROGID}\shell\open\command") or ""
     check(str(exe).lower() in cmd.lower() and cmd.endswith('"%1"'), f".kdbx opens with PR7-PM: {cmd}", p)
-    check(value(r"Software\Classes\.kdbx\OpenWithProgids", PROGID) is not None, ".kdbx Open with lists PR7-PM", p)
+    check(has_value(r"Software\Classes\.kdbx\OpenWithProgids", PROGID), ".kdbx Open with lists PR7-PM", p)
     check(value(r"Software\RegisteredApplications", "Paragon PR7-PM") is not None, "PR7-PM in Default apps", p)
     with tempfile.TemporaryDirectory() as d:
         out = Path(d) / "out.json"
