@@ -120,7 +120,7 @@ def test_lock_unlock_and_the_idle_lock(window, tmp_path, qapp):
     assert window.master.text() == ""                                         # not kept in the field
     settings.set("lock_minutes", 1)
     window.active()
-    assert window.idle.isActive() and 59_000 < window.idle.remainingTime() <= 60_000
+    assert window.idle.isActive() and 59_000 < window.idle.remainingTime() <= 63_000   # coarse timer: up to 5% late
     window.idle.timeout.emit()
     assert window.vault is None
 

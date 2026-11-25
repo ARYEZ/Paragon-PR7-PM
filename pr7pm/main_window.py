@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
                                QSpinBox, QStackedWidget, QTableView, QTabBar, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
-from . import __version__, generator, settings, shell, theme, vault, widgets
+from . import __version__, finish, generator, settings, shell, theme, vault, widgets
 from .clipboard import SecretClipboard
 
 DEFAULTS = {"lock_minutes": 5, "lock_on_session": True, "lock_on_minimize": False, "clear_seconds": 10,
@@ -61,9 +61,9 @@ QLabel#generated {{ font-size: 22px; padding: 14px; background: {theme.WIDGET}; 
     border-radius: 4px; color: {theme.TEXT}; }}
 QPushButton[kind="primary"] {{ background: {theme.qss_gradient()}; color: #FFFFFF; border: none; border-radius: 4px;
     padding: 10px 26px; font-weight: 600; }}
-QFrame#side {{ background: {theme.PANEL}; border-right: 1px solid {theme.PANEL_EDGE}; }}
-QFrame#preview {{ background: {theme.PANEL}; border-top: 1px solid {theme.PANEL_EDGE}; }}
-QTreeWidget#groups {{ background: {theme.PANEL}; border: none; border-right: 1px solid {theme.PANEL_EDGE}; padding: 6px; }}
+QFrame#side {{ background: {theme.DOCK_TOP}; border-right: 1px solid {theme.PANEL_EDGE}; }}
+QFrame#preview {{ background: {theme.DOCK_TOP}; border-top: 1px solid {theme.PANEL_EDGE}; }}
+QTreeWidget#groups {{ background: {theme.DOCK_TOP}; border: none; border-right: 1px solid {theme.PANEL_EDGE}; padding: 6px; }}
 QTreeWidget#groups::item {{ padding: 5px 2px; }}
 QProgressBar#meter {{ background: {theme.PANEL_EDGE}; border: none; border-radius: 3px; }}
 QProgressBar#meter::chunk {{ background: {theme.qss_gradient()}; border-radius: 3px; }}
@@ -787,6 +787,18 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(stylesheet())
         self.header.update()
 
+    def set_finish(self, name: str):
+        """OBSIDIAN or AURORA, for this window and (finish.py) every other family app."""
+        theme.set_finish(name)
+        finish.set(theme.FINISH)                 # every family app follows (finish.py)
+        settings.set("finish", theme.FINISH)
+        self.restyle()
+        self.model._icon = None                  # the entries' key icon is drawn in the finish's colour
+        self._fill_recent()
+        if self.vault is not None:
+            self.fill_groups()
+            self.refresh()
+
     # ---------------------------------------------------------------- the unlock page
     def _unlock_page(self) -> QWidget:
         page = QWidget()
@@ -1420,6 +1432,11 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addAction("New group", self.new_group).setEnabled(self.vault is not None)
         m.addSeparator()
+        fin = m.addMenu("Finish")
+        for name in ("obsidian", "aurora"):
+            a = fin.addAction(name.upper(), lambda n=name: self.set_finish(n))
+            a.setCheckable(True)
+            a.setChecked(theme.FINISH == name)
         m.addAction("Options", self.options)
         m.addAction("Check for updates", self.check_updates)
         m.addAction(f"About PR7-PM {__version__}", lambda: self._say(
