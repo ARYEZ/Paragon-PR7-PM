@@ -36,7 +36,7 @@ jobs:
           pip install --force-reinstall --no-deps --no-cache-dir --no-binary pyinstaller "pyinstaller==$v"
           if ($LASTEXITCODE -ne 0) { throw "building PyInstaller's bootloader failed" }
           python -c "import PyInstaller, os; d = os.path.join(os.path.dirname(PyInstaller.__file__), 'bootloader', 'Windows-64bit-intel'); print(d, sorted(os.listdir(d)))"
-      - name: Tests (the key, the start-up entry and the copy's program run on this runner only)
+      - name: Tests (the .kdbx registration runs on this runner only)
         timeout-minutes: 20
         env:
           QT_QPA_PLATFORM: offscreen
@@ -52,7 +52,8 @@ jobs:
             if (-not (Get-ChildItem -Recurse dist/PR7-PM/_internal -Filter $f)) { throw "$f is missing" }
           }
           foreach ($f in "dist/PR7-PM/PR7-PM.exe", "dist/PR7-PM/_internal/pr7pm/fonts/Inter-Regular.ttf",
-                         "dist/PR7-PM/_internal/pr7pm/icons/app.ico") {
+                         "dist/PR7-PM/_internal/pr7pm/icons/app.ico", "dist/PR7-PM/_internal/pr7pm/words.txt",
+                         "dist/PR7-PM/_internal/pykeepass/blank_database.kdbx") {
             if (-not (Test-Path $f)) { throw "missing $f" }
           }
           $vi = (Get-Item dist/PR7-PM/PR7-PM.exe).VersionInfo

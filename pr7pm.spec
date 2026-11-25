@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 
+from PyInstaller.utils.hooks import collect_data_files
+
 root = Path(SPECPATH)
 version = re.search(r'__version__ = "(.+?)"', (root / "pr7pm" / "__init__.py").read_text()).group(1)
 nums = tuple(int(x) for x in (version.split(".") + ["0", "0", "0"])[:4])
@@ -19,7 +21,7 @@ if sys.platform == "win32":  # version resources exist only in Windows programs
         ffi=FixedFileInfo(filevers=nums, prodvers=nums),
         kids=[StringFileInfo([StringTable("040904B0", [
             StringStruct("CompanyName", "Paragon"),
-            StringStruct("FileDescription", "Paragon PR7-PM clipboard history"),
+            StringStruct("FileDescription", "Paragon PR7-PM password manager"),
             StringStruct("FileVersion", version),
             StringStruct("InternalName", "PR7-PM"),
             StringStruct("LegalCopyright", "Paragon"),
@@ -31,9 +33,13 @@ if sys.platform == "win32":  # version resources exist only in Windows programs
 a = Analysis(
     [str(root / "tools" / "launcher.py")],
     pathex=[str(root)],
-    datas=[(str(root / "pr7pm" / "fonts"), "pr7pm/fonts"), (str(root / "pr7pm" / "icons"), "pr7pm/icons")],
-    # QtNetwork's local socket tells the running PR7-PM to open its clips when it's started again.
-    hiddenimports=["PySide6.QtNetwork"],
+    datas=[(str(root / "pr7pm" / "fonts"), "pr7pm/fonts"), (str(root / "pr7pm" / "icons"), "pr7pm/icons"),
+           (str(root / "pr7pm" / "words.txt"), "pr7pm")]                   # the passphrase word list
+          + collect_data_files("pykeepass"),        # its blank_database.kdbx: what every new database starts from
+    # QtNetwork's local socket hands a second start's file to the running PR7-PM. pykeepass reads its XML with lxml,
+    # decrypts with pycryptodomex and stretches the key with argon2-cffi: compiled parts PyInstaller must collect.
+    hiddenimports=["PySide6.QtNetwork", "lxml.etree", "lxml._elementpath", "Cryptodome.Cipher.AES",
+                   "Cryptodome.Cipher.ChaCha20", "argon2", "argon2.low_level", "_cffi_backend"],
     excludes=["tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQml", "PySide6.QtQuick",
               "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.Qt3DCore", "PySide6.QtMultimedia", "PySide6.QtPrintSupport", "PIL"],
 )

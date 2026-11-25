@@ -41,12 +41,25 @@ class Row:
 
 
 def otp_now(uri: str, at: float | None = None) -> tuple[str, int]:
-    """(code, seconds left) for an otpauth:// URI (KeePassXC keeps it in the entry's "otp" field)."""
-    import pyotp
-    totp = pyotp.parse_uri(uri)
+    """(code, seconds left) for an otpauth:// URI (KeePassXC keeps it in the entry's "otp" field): RFC 6238 TOTP,
+    written here because pyotp refuses the 80-bit secrets many services (Google among them) still hand out."""
+    import base64
+    import hashlib
+    import hmac
+    import struct
+    from urllib.parse import parse_qs, urlparse
+    q = {k.lower(): v[0] for k, v in parse_qs(urlparse(uri).query).items()}
+    secret = q.get("secret", "").replace(" ", "").upper()
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8))
+    digits = int(q.get("digits", 6))
+    period = int(q.get("period", 30)) or 30
+    algo = {"SHA1": hashlib.sha1, "SHA256": hashlib.sha256, "SHA512": hashlib.sha512}[q.get("algorithm",
+                                                                                            "SHA1").upper()]
     t = time.time() if at is None else at
-    step = getattr(totp, "interval", 30)
-    return totp.at(t), int(step - t % step)
+    mac = hmac.new(key, struct.pack(">Q", int(t // period)), algo).digest()
+    o = mac[-1] & 0x0F
+    code = (struct.unpack(">I", mac[o:o + 4])[0] & 0x7FFFFFFF) % 10 ** digits
+    return str(code).zfill(digits), int(period - t % period)
 
 
 class Vault:
@@ -231,3 +244,60 @@ def _uuid(text: str):
 
 def _haystack(e) -> str:
     return " ".join([e.title or "", e.username or "", e.url or "", e.notes or "", " ".join(e.tags or [])]).casefold()
+
+
+# -------------------------------------------------------------------- importing
+_COLUMNS = {   # our field <- the names other programs' CSV exports use (KeePassXC, Bitwarden, browsers, KeePass)
+    "group": ("group", "folder", "grouping"),
+    "title": ("title", "name", "account", "website name"),
+    "username": ("username", "user name", "login_username", "login", "email"),
+    "password": ("password", "login_password"),
+    "url": ("url", "login_uri", "website", "web site"),
+    "notes": ("notes", "comments", "extra"),
+    "otp": ("totp", "login_totp", "otp", "otpauth"),
+}
+
+
+def import_csv(v: Vault, path: str, into: str = "Imported") -> int:
+    """Entries from a CSV export (KeePassXC, Bitwarden, Chrome / Firefox / Edge, KeePass) into a new group `into`,
+    keeping their groups below it. Returns how many were added."""
+    import csv
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        rows = list(csv.reader(fh))
+    if not rows:
+        return 0
+    head = [h.strip().casefold() for h in rows[0]]
+    col = {}
+    for field_, names in _COLUMNS.items():
+        for n in names:
+            if n in head:
+                col[field_] = head.index(n)
+                break
+    if "password" not in col or ("title" not in col and "url" not in col):
+        raise ValueError("This CSV file has no password and title (or URL) columns.")
+    top = v.add_group(v.root, into)
+    groups = {"": top}
+    added = 0
+    for r in rows[1:]:
+        def get(f):
+            i = col.get(f)
+            return r[i].strip() if i is not None and i < len(r) else ""
+        if not any(x.strip() for x in r):
+            continue
+        g = top
+        path_ = "/".join(p for p in get("group").replace("\\", "/").split("/") if p and p != "Root")
+        if path_:
+            built = ""
+            for part in path_.split("/"):
+                key = f"{built}/{part}"
+                if key not in groups:
+                    groups[key] = v.add_group(groups[built] if built in groups else top, part)
+                built = key
+            g = groups[built]
+        otp = get("otp")
+        if otp and not otp.startswith("otpauth://"):
+            otp = f"otpauth://totp/{get('title') or 'Imported'}?secret={otp.replace(' ', '')}"
+        v.add_entry(g, get("title") or get("url"), get("username"), get("password"), url=get("url"),
+                    notes=get("notes"), otp=otp)
+        added += 1
+    return added

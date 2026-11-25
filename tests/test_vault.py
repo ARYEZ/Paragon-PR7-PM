@@ -77,6 +77,8 @@ def test_one_time_codes_match_rfc_6238():
     assert vault.otp_now(uri, 59) == ("94287082", 1)
     assert vault.otp_now(uri, 1111111109)[0] == "07081804"
     assert vault.otp_now(uri, 1234567890)[0] == "89005924"
+    sha256 = "otpauth://totp/t?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA&digits=8&algorithm=SHA256"
+    assert vault.otp_now(sha256, 59)[0] == "46119246"                    # RFC 6238's SHA-256 vector
 
 
 def test_generated_passwords_follow_the_options():
@@ -122,3 +124,25 @@ def test_keepassxc_itself_opens_what_pr7pm_writes_and_the_other_way(db, tmp_path
     v = vault.Vault.open(str(made), "pw-from-kx")
     e = v.kp.find_entries(title="From KeePassXC", first=True)
     assert (e.username, e.password, e.url) == ("kx-user", "entry-password-9", "https://example.org")
+
+
+def test_importing_keepassxc_and_bitwarden_exports(db, tmp_path):
+    kx = tmp_path / "keepassxc.csv"
+    kx.write_text('"Group","Title","Username","Password","URL","Notes","TOTP"\n'
+                  '"Root/Work/VPN","Office VPN","jo","pw-vpn","https://vpn.example","","JBSWY3DPEHPK3PXP"\n'
+                  '"Root","Router","admin","pw-router","http://192.168.1.1","",""\n', encoding="utf-8")
+    assert vault.import_csv(db, str(kx)) == 2
+    vpn = db.kp.find_entries(title="Office VPN", first=True)
+    assert vpn.password == "pw-vpn" and vpn.group.name == "VPN" and vpn.group.parentgroup.name == "Work"
+    assert vault.otp_now(vpn.otp, 59)[0] == "996554"                    # an 80-bit secret, as many services use
+    bw = tmp_path / "bitwarden.csv"
+    bw.write_text("folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n"
+                  "Shopping,,login,Shop,,,0,https://shop.example,me@x,pw-shop,\n", encoding="utf-8")
+    assert vault.import_csv(db, str(bw), into="Bitwarden") == 1
+    shop = db.kp.find_entries(title="Shop", first=True)
+    assert (shop.username, shop.password, shop.url, shop.group.name) == ("me@x", "pw-shop", "https://shop.example",
+                                                                         "Shopping")
+    bad = tmp_path / "bad.csv"
+    bad.write_text("a,b\n1,2\n")
+    with pytest.raises(ValueError):
+        vault.import_csv(db, str(bad))

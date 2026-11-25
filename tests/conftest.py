@@ -22,3 +22,18 @@ def qapp(tmp_path_factory):
     theme.load_fonts()
     yield app
     app.clipboard().clear()                  # PySide's offscreen clipboard crashes at exit while it holds data
+
+
+@pytest.fixture
+def window(qapp, tmp_path):
+    from pr7pm import main_window, settings
+    for k in ("recent", "lock_minutes", "clear_seconds", "open_last", "lock_on_minimize"):
+        settings.set(k, main_window.DEFAULTS.get(k, []) if k != "recent" else [])
+    w = main_window.MainWindow()
+    w.answers["say"] = lambda kind, text: None
+    w.answers["menu"] = lambda *a: None
+    w.show()
+    yield w
+    w.answers["say"] = lambda kind, text: None
+    w.close()
+    qapp.clipboard().clear()
