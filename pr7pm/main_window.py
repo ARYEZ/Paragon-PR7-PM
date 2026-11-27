@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
 
 from . import __version__, finish, generator, settings, shell, theme, vault, widgets
 from .clipboard import SecretClipboard
+from .sessionlock import ScreenLockWatcher
 
 DEFAULTS = {"lock_minutes": 5, "lock_on_session": True, "lock_on_minimize": False, "clear_seconds": 10,
             "open_last": True}
@@ -757,6 +758,8 @@ class MainWindow(QMainWindow):
         self.clip = SecretClipboard(option("clear_seconds"), self)
         self.clip.left.connect(self._copied_left)
         self.clip.cleared.connect(lambda: self.copied.setText(""))
+        self.screen_lock = ScreenLockWatcher(parent=self)          # Linux: Plasma's lock screen (Windows: nativeEvent)
+        self.screen_lock.locked.connect(self._screen_locked)
         body = QWidget()
         self.setCentralWidget(body)
         v = QVBoxLayout(body)
@@ -1533,6 +1536,10 @@ class MainWindow(QMainWindow):
                 self._session_note = True
             except Exception:  # noqa: BLE001
                 pass
+
+    def _screen_locked(self):
+        if option("lock_on_session"):
+            self.lock("screen locked")
 
     def nativeEvent(self, event_type, message):
         if sys.platform == "win32" and event_type == b"windows_generic_MSG":

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4
+
+- **Copied passwords stay out of Plasma's clipboard history** (Linux, PR7-OS): every copy now carries KDE's
+  "secret" mark too, so Klipper neither lists it nor saves it to disk. Before, it kept every copied password even
+  after PR7-PM emptied the clipboard. (Windows already had its own marks; nothing changes there.)
+- **Locking the screen locks PR7-PM on Linux**: Plasma's lock screen (Meta+L, or after idle) now closes the open
+  database, as Windows' lock already did. Options > "Lock when the session locks" switches both.
+
 ## 0.2.3
 
 - The family list (`family.py`) knows the three newest Paragon apps: PR7-HW (hardware information), PR7-BK

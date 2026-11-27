@@ -14,7 +14,9 @@ is the target; it runs on Linux for tests. The owner writes Python; explain the 
 - `pr7pm/generator.py` (no Qt): `secrets` only; `words.txt` = the EFF large list as KeePassXC ships it (7,772 words).
 - `pr7pm/clipboard.py`: `private_data` sets ExcludeClipboardContentFromMonitorProcessing, CanIncludeInClipboardHistory
   = DWORD 0 and Clipboard Viewer Ignore, in Qt's windows-mime form on Windows (`mime_name`): what PR7-CB's
-  `clipwatch.private` and Windows' history check. `SecretClipboard` empties it after N s only if it's still ours.
+  `clipwatch.private` and Windows' history check. `SecretClipboard` empties it after N s only if it's still ours. On Linux `x-kde-passwordManagerHint: secret` too
+  (Klipper skips it). `sessionlock.py`: org.freedesktop.ScreenSaver ActiveChanged(true) on the session bus locks
+  (Windows: WTS in nativeEvent); tests send it on a private dbus-daemon.
 - `pr7pm/main_window.py`: unlock page / database page (QStackedWidget); `EntryModel` (plain list, never
   QStandardItemModel); `EntryTable` and `SearchBox` take their keys themselves (Qt's table answers Ctrl+C with the
   cell's text; window shortcuts need an active window); saves after every change (`changed`); `lock` (idle timer via

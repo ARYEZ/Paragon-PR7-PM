@@ -1,5 +1,9 @@
 import os
+import shutil
+import subprocess
+import sys
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
@@ -90,6 +94,8 @@ def test_copies_are_private_and_cleared(window, tmp_path, qapp):
     assert qapp.clipboard().text() == "v7#Kq2!mWz@R8pL$e4Tn"
     assert any("ExcludeClipboardContentFromMonitorProcessing" in f for f in md.formats())
     assert bytes(md.data(next(f for f in md.formats() if "CanIncludeInClipboardHistory" in f))) == b"\0\0\0\0"
+    if sys.platform != "win32":                       # Plasma's clipboard history (Klipper) skips and never saves it
+        assert bytes(md.data("x-kde-passwordManagerHint")) == b"secret"
     assert "PASSWORD COPIED" in window.copied.text() and "KEPT OUT OF CLIPBOARD HISTORY" in window.copied.text()
     QTest.qWait(1500)
     assert qapp.clipboard().text() == "" and window.copied.text() == ""      # emptied after a second
@@ -203,3 +209,42 @@ def test_version_and_selftest(tmp_path, capsys):
     assert got["entry"] == ["me@proton.me", "v7#Kq2!mWz"] and got["copied"] == "v7#Kq2!mWz" and got["otp"] == 6
     assert got["cleared_on_lock"] and got["wrong_password_refused"] and got["unlocked"] and got["fonts"]
     assert len(got["marks"]) == 3 and got["kdbx"].startswith("KDBX 4")
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not shutil.which("dbus-daemon"), reason="needs a D-Bus session bus")
+def test_locking_the_screen_locks_the_database(window, tmp_path, qapp):
+    """Plasma's lock screen says ActiveChanged(true) on org.freedesktop.ScreenSaver: sent here on a private session
+    bus, as kscreenlocker sends it, the open database closes (and only when "lock when the session locks" is on)."""
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage
+    from pr7pm.sessionlock import ScreenLockWatcher
+    daemon = subprocess.Popen(["dbus-daemon", "--session", "--nofork", "--print-address=1"], stdout=subprocess.PIPE,
+                              text=True)
+    try:
+        address = daemon.stdout.readline().strip()
+        listen = QDBusConnection.connectToBus(address, "pr7pm-test-listen")
+        locker = QDBusConnection.connectToBus(address, "pr7pm-test-locker")
+        window.screen_lock = ScreenLockWatcher(listen, window)
+        window.screen_lock.locked.connect(window._screen_locked)
+        assert window.screen_lock.watching
+
+        def lock_screen(active=True):
+            msg = QDBusMessage.createSignal("/ScreenSaver", "org.freedesktop.ScreenSaver", "ActiveChanged")
+            msg.setArguments([active])
+            assert locker.send(msg)
+            for _ in range(50):
+                qapp.processEvents()
+                QTest.qWait(20)
+        make(window, tmp_path)
+        lock_screen(False)                                    # the screen waking up: nothing happens
+        assert window.vault is not None
+        settings.set("lock_on_session", False)
+        lock_screen()
+        assert window.vault is not None                       # the option is off: left open
+        settings.set("lock_on_session", True)
+        lock_screen()
+        assert window.vault is None                           # locked with the screen
+    finally:
+        QDBusConnection.disconnectFromBus("pr7pm-test-listen")
+        QDBusConnection.disconnectFromBus("pr7pm-test-locker")
+        daemon.terminate()
+        daemon.wait()
